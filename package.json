@@ -1,7 +1,7 @@
 {
   "name": "es3-harmony-webpack-plugin",
-  "version": "0.0.2",
-  "description": "quick and dirty support for Webpack2 + ES6 modules + ES3 environment (no sourcemaps)",
+  "version": "0.0.3",
+  "description": "quick and dirty support for Webpack2.2 + ES6 modules + ES3 environment (no sourcemaps)",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

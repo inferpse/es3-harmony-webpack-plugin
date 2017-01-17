@@ -40,8 +40,9 @@ HarmonyPlugin.prototype.apply = function(compiler) {
           // replace define and requires
           var result = input.replace(/__webpack_require__\.d.*{([\s\S])+?};/, '__webpack_require__.d = function(exports, name, getter) { exports[name] = getter; }')
                             .replace(/(___default\.[a-z0-9]+)/gi, '$1()')
-                            .replace(/\/\* harmony default export \*\/ exports\["(.*)"\] = (.*?);/g, '/* harmony default export */ __webpack_require__.d(exports, "$1", function() { return $2; });')
-                            .replace(/(__WEBPACK_IMPORTED_MODULE.*?\[".*?".*?\/\.*?\*.*?\*\/\]?)/g, '($1())');
+                            .replace(/\/\* harmony default export \*\/ __webpack_exports__\["(.*)"\] = (.*?);/g, '/* harmony default export */ __webpack_require__.d(__webpack_exports__, "$1", function() { return $2; });')
+                            .replace(/(__WEBPACK_IMPORTED_MODULE.*?\[".*?".*?\/\.*?\*.*?\*\/\]?)/g, '($1())')
+                            .replace(/Object\.defineProperty\(__webpack_exports__, "__esModule", { value: true }\)/g, '__webpack_exports__.__esModule = true');
 
           // save result
           asset.__es3harmonyapplied = compilation.assets[file] = new RawSource(result);

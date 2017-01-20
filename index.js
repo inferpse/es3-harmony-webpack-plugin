@@ -44,6 +44,13 @@ HarmonyPlugin.prototype.apply = function(compiler) {
                             .replace(/(__WEBPACK_IMPORTED_MODULE.*?\[".*?".*?\/\.*?\*.*?\*\/\]?)/g, '($1())')
                             .replace(/Object\.defineProperty\(__webpack_exports__, "__esModule", { value: true }\)/g, '__webpack_exports__.__esModule = true');
 
+          // support custom regs here
+          if (options && options.customReplacers instanceof Array) {
+            options.customReplacers.forEach(function(replacer) {
+              result = result.replace(replacer.reg, replacer.value);
+            });
+          }
+
           // save result
           asset.__es3harmonyapplied = compilation.assets[file] = new RawSource(result);
         } catch(e) {

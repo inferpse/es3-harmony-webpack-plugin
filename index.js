@@ -37,12 +37,15 @@ HarmonyPlugin.prototype.apply = function(compiler) {
           // grab source input
           var input = asset.source();
 
-          // replace define and requires
-          var result = input.replace(/__webpack_require__\.d.*{([\s\S])+?};/, '__webpack_require__.d = function(exports, name, getter) { exports[name] = getter; }')
-                            .replace(/(___default\.[a-z0-9]+)/gi, '$1()')
-                            .replace(/\/\* harmony default export \*\/ __webpack_exports__\["(.*)"\] = (.*?);/g, '/* harmony default export */ __webpack_require__.d(__webpack_exports__, "$1", function() { return $2; });')
-                            .replace(/(__WEBPACK_IMPORTED_MODULE.*?\[".*?".*?\/\.*?\*.*?\*\/\]?)/g, '($1())')
-                            .replace(/Object\.defineProperty\(__webpack_exports__, "__esModule", { value: true }\)/g, '__webpack_exports__.__esModule = true');
+          /* global require */
+          var replacers = require('./replacers.js');
+
+          // perform replacements
+          var result = input;
+          for (var i = 0; i < replacers.length; i++) {
+            var replacer = replacers[i];
+            result = result.replace(replacer.reg, replacer.val);
+          }
 
           // support custom regs here
           if (options && options.customReplacers instanceof Array) {

@@ -1,6 +1,6 @@
 {
   "name": "es3-harmony-webpack-plugin",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "quick and dirty support for Webpack2.2 + ES6 modules + ES3 environment (no sourcemaps)",
   "main": "index.js",
   "scripts": {

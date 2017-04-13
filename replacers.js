@@ -15,7 +15,7 @@ module.exports = [
     val: '$1()'
   },
   {
-    reg: /(__WEBPACK_IMPORTED_MODULE.*?\[".*?"(?:.*?\/\.*?\*.*?\*\/)?\]?)/g,
+    reg: /(__WEBPACK_IMPORTED_MODULE.*?\[".*?"(?:.*?\/\.*?\*.*?\*\/)*?\])/g,
     val: '($1())'
   },
 

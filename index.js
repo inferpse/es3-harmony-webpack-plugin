@@ -79,7 +79,7 @@ const fixModuleCode = (source, options) => {
   replaceInSource(origSource, source, /(__webpack_require__\([0-9]+\)\..*);/g, match => `${match[1]}();`);
 
   // fix star imports + getters
-  replaceInSource(origSource, source, /=.*(__WEBPACK_IMPORTED_MODULE_[0-9_a-z]+);/gi, match => `= (function(){ var result = {}; for (var prop in ${match[1]}) { if(${match[1]}.hasOwnProperty(prop) && typeof ${match[1]}[prop] === "function") result[prop] = ${match[1]}[prop](); }  return result; }());`);
+  replaceInSource(origSource, source, /=.*(__WEBPACK_IMPORTED_MODULE_[0-9_a-z]+)($|;)/gmi, match => `= (function(){ var result = {}; for (var prop in ${match[1]}) { if(${match[1]}.hasOwnProperty(prop) && typeof ${match[1]}[prop] === "function") result[prop] = ${match[1]}[prop](); }  return result; }());`);
 
   // replace default export with getter (when ModuleConcatenationPlugin is active)
   replaceInSource(origSource, source, /\/\* harmony default export \*\/ var (.+?) = __webpack_exports__\["(.*)"\] = (.*?);/g, match => `/* harmony default export */ var ${match[1]} = ${match[3]}; __webpack_require__.d(__webpack_exports__, "${match[2]}", function() { return ${match[3]}; });`);

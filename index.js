@@ -81,11 +81,13 @@ const fixModuleCode = (source, options) => {
   // fix star imports + getters
   replaceInSource(origSource, source, /=.*(__WEBPACK_IMPORTED_MODULE_[0-9_a-z]+)($|;)/gmi, match => `= (function(){ var result = {}; for (var prop in ${match[1]}) { if(${match[1]}.hasOwnProperty(prop) && typeof ${match[1]}[prop] === "function") result[prop] = ${match[1]}[prop](); }  return result; }());`);
 
-  // replace default export with getter (when ModuleConcatenationPlugin is active)
+  // ModuleConcatenationPlugin fixes:
   replaceInSource(origSource, source, /\/\* harmony default export \*\/ var (.+?) = __webpack_exports__\["(.*)"\] = (.*?);/g, match => `/* harmony default export */ var ${match[1]} = ${match[3]}; __webpack_require__.d(__webpack_exports__, "${match[2]}", function() { return ${match[3]}; });`);
-
-  // invoke getters on default imports (when ModuleConcatenationPlugin is active)
-  replaceInSource(origSource, source, /[a-z0-9$_]+\[".*?" \/\*.*?\*\/\](?!\(\)\))/gi, (match) => { return match[0].indexOf('WEBPACK_IMPORTED_MODULE') > -1 ? null : `(${match[0]}())` });
+  replaceInSource(origSource, source, /(\w[a-z0-9_]+)\.([a-z]+)/g, (match) => { return match.input.indexOf(`${match[1]} = /*#__PURE__*/`) > -1 ? `${match[0]}()` : null });
+  replaceInSource(origSource, source, /([a-z0-9_]+)\[".*?"(\s?\/.*?\/)?\]/g, (match) => {
+    const isInlinedModule = new RegExp(`// EXTERNAL MODULE.*\r?\nvar ${match[1]} =`, 'g').test(match.input);
+    return isInlinedModule ? `(${match[0]}())` : null
+  });
 
   // add support for custom replacers
   if (options.customReplacers) {

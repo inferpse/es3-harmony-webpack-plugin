@@ -1,6 +1,6 @@
 {
   "name": "es3-harmony-webpack-plugin",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "description": "Support Webpack 3 code in ES3 environment (including sourcemaps)",
   "main": "index.js",
   "scripts": {

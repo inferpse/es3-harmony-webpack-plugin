@@ -88,6 +88,10 @@ const fixModuleCode = (source, options) => {
     const isInlinedModule = new RegExp(`// EXTERNAL MODULE.*\r?\nvar ${match[1]} =`, 'g').test(match.input);
     return isInlinedModule ? `(${match[0]}())` : null
   });
+  replaceInSource(origSource, source, /(.*) = ([0-9_a-z]+)($|;)/g, (match) => {
+    const isStarImport = new RegExp(`// EXTERNAL MODULE.*\r?\nvar ${match[2]} =`, 'g').test(match.input);
+    return isStarImport ? `${match[1]} = (function(){ var result = {}; for (var prop in ${match[2]}) { if(${match[2]}.hasOwnProperty(prop) && typeof ${match[2]}[prop] === "function") result[prop] = ${match[2]}[prop](); }  return result; }());` : null;
+  });
 
   // add support for custom replacers
   if (options.customReplacers) {

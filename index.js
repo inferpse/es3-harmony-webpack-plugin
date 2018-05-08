@@ -7,123 +7,99 @@ class ES3HarmonyPlugin {
     }, options);
   }
   apply(compiler) {
-    compiler.plugin('compilation', compilation => {
-      // perform mainTemplate replacements required to enable ES3 support
-      compilation.mainTemplate.plugin('require-extensions', source => {
-        return fixRequireExtensions(source);
+    compiler.hooks.compilation.tap('ES3HarmonyPlugin', compilation => {
+
+      compilation.mainTemplate.hooks.beforeStartup.tap('ES3HarmonyPlugin', source => {
+        return source.replace(
+          /var oldJsonpFunction = jsonpArray\.push\.bind\(jsonpArray\);/,
+          'var oldPushMethod = jsonpArray.push;\n' +
+          'var oldJsonpFunction = function(){ return oldPushMethod.apply(jsonpArray, arguments) };'
+        );
       });
 
-      // fix generated module code according to replacements in mainTemplate
-      compilation.moduleTemplate.plugin('module', module => {
-        return fixModuleCode(module, this.options);
+      compilation.mainTemplate.hooks.requireExtensions.tap('ES3HarmonyPlugin', source => {
+        return source
+          .replace(
+            /__webpack_require__\.r =.*{[\s\S]+?};/,
+            '__webpack_require__.r = function(exports) { exports.__esModule = true }'
+          )
+          .replace(
+            /__webpack_require__\.d =.*{[\s\S]+?};/,
+            '__webpack_require__.d = function(exports, name, getter) { if(!__webpack_require__.o(exports, name)) exports[name] = getter };'
+          )
+          .replace(
+            /(__webpack_require__\((.+)?\)(\.|\[).*);/g,
+            '$1();'
+          )
       });
 
-      // invoke internal getters in main template if needed
-      compilation.mainTemplate.plugin('require-ensure', source => {
-        return fixInternalGetters(source);
+      compilation.moduleTemplates.javascript.hooks.module.tap('ES3HarmonyPlugin', source => {
+        const { options, replaceInSource } = this;
+
+        // initialize replace source decorator
+        source = new ReplaceSource(source);
+        const origSource = source.source();
+
+        // avoid using "bind" in ES3 environment
+        replaceInSource(origSource, source, /__webpack_require__\.bind\(null, (.*?)\)/g, match => `function(){ return __webpack_require__(${match[1]}) }`);
+
+        // explicitly invoke getter function in the places where it's used
+        replaceInSource(origSource, source, /([a-z0-9_]*?__WEBPACK_IMPORTED_MODULE.*?\[(?:\/\*.*?\*\/)*?\s?".*?"\])/gi, match => `(${match[0]}())`);
+
+        // replace default export with getter
+        replaceInSource(origSource, source, /\/\* harmony default export \*\/ __webpack_exports__\["(.*)"\] = (.*?);/g, match => `/* harmony default export */ __webpack_require__.d(__webpack_exports__, "${match[1]}", function() { return ${match[2]}; });`);
+
+        // invoke getters on default assignments
+        replaceInSource(origSource, source, /(= module\['default'\])/g, match => `${match[1]}()`);
+
+        // replace Object.keys with plain loop
+        replaceInSource(origSource, source, /return Object\.keys\(map\);/g, () => `return (function() { var r = []; for (var p in map) { if (map.hasOwnProperty(p)) { r.push(p); } } return r; }())`);
+
+        // fix internal getters (in source modules as well)
+        replaceInSource(origSource, source, /(__webpack_require__\((.+)?\)(\.|\[).*);/g, match => `${match[1]}();`);
+
+        // ModuleConcatenationPlugin fixes:
+        replaceInSource(origSource, source, /\/\* harmony default export \*\/ var (.+?) = __webpack_exports__\["(.*)"\] = (.*?);/g, match => `/* harmony default export */ var ${match[1]} = ${match[3]}; __webpack_require__.d(__webpack_exports__, "${match[2]}", function() { return ${match[3]}; });`);
+        replaceInSource(origSource, source, /(\w[a-z0-9_]+)\.([a-z]+)/g, (match) => { return match.input.indexOf(`${match[1]} = /*#__PURE__*/`) > -1 ? `${match[0]}()` : null });
+        replaceInSource(origSource, source, /([a-z0-9_]+)\[".*?"(\s?\/.*?\/)?\]/g, (match) => {
+          const isInlinedModule = new RegExp(`// EXTERNAL MODULE.*\r?\nvar ${match[1]} =`, 'g').test(match.input);
+          return isInlinedModule ? `(${match[0]}())` : null
+        });
+        replaceInSource(origSource, source, /(.*) = ([0-9_a-z]+)($|;)/g, (match) => {
+          const isStarImport = new RegExp(`// EXTERNAL MODULE.*\r?\nvar ${match[2]} =`, 'g').test(match.input);
+          return isStarImport ? `${match[1]} = (function(){ var result = {}; for (var prop in ${match[2]}) { if(${match[2]}.hasOwnProperty(prop) && typeof ${match[2]}[prop] === "function") result[prop] = ${match[2]}[prop](); }  return result; }());` : null;
+        });
+
+        // add support for custom replacers
+        if (options.customReplacers) {
+          options.customReplacers.forEach(replacer => {
+            replaceInSource(origSource, source, replacer.reg, replacer.value);
+          });
+        }
+
+        return source;
       });
+
     });
   }
-}
+  replaceInSource(origSource, source, regex, replacement) {
+    if (regex.test(origSource)) {
+      let match;
+      regex.lastIndex = 0;
+      while (match = regex.exec(origSource)) {
+        const oldStatement = match[0],
+              newStatement = replacement(match);
 
-/**
- * Replace __webpack_require__.d with function that will require explicit getter invocation
- */
-const fixRequireExtensions = (source) => {
-  return source.replace(
-    /__webpack_require__\.d =.*{[\s\S]+?};/,
-    `__webpack_require__.d = function(exports, name, getter) { if(!__webpack_require__.o(exports, name)) exports[name] = getter };`
-  );
-}
+        if (newStatement !== null) {
+          source.replace(match.index, match.index + oldStatement.length - 1, newStatement);
+        }
 
-/**
- * Replace internal getters (if any introduced by 3rd party plugins)
- */
-const fixInternalGetters = (source) => {
-  return source.replace(/(__webpack_require__\([0-9]+\)\..*);/g, '$1();');
-}
-
-/**
- * Replace special module identifiers (__esModule)
- */
-const fixModuleCode = (source, options) => {
-  // initialize shared variables
-  source = new ReplaceSource(source);
-  const origSource = source.source();
-
-  // replace "Object.defineProperty(__webpack_exports__, "__esModule", { value: true })" with simple "__webpack_exports__.__esModule = true"
-  replaceInSource(origSource, source, /Object\.defineProperty\((.*?), "__esModule", { value: true }\);/g, match => `${match[1]}.__esModule = true;`);
-
-  // explicitly invoke getter function in the places where it's used
-  replaceInSource(origSource, source, /([a-z0-9_]*?__WEBPACK_IMPORTED_MODULE.*?\[".*?"(?:.*?\/\.*?\*.*?\*\/)*?\])/gi, match => `(${match[0]}())`);
-
-  // avoid using "bind" in ES3 environment
-  replaceInSource(origSource, source, /__webpack_require__\.bind\(null, (.*?)\)/g, match => `function(){ return __webpack_require__(${match[1]}) }`);
-
-  // replace default export with getter
-  replaceInSource(origSource, source, /\/\* harmony default export \*\/ __webpack_exports__\["(.*)"\] = (.*?);/g, match => `/* harmony default export */ __webpack_require__.d(__webpack_exports__, "${match[1]}", function() { return ${match[2]}; });`);
-
-  // invoke getters on default imports
-  replaceInSource(origSource, source, /(___default\.[a-z0-9]+)/gi, match => `${match[1]}()`);
-
-  // invoke getters on default assignments
-  replaceInSource(origSource, source, /(= module\['default'\])/g, match => `${match[1]}()`);
-
-  // replace things related to promises and code splitting
-  replaceInSource(origSource, source, /(Promise\.all\(ids\.slice\(1\)\.map\(__webpack_require__\.e\)\))/g, () => `Promise.all(function(){ var r = ids.slice(1); for(var i = 0; i < r.length; i++) { r[i] = __webpack_require__.e(r[i]); } return r; }())`);
-
-  // replace Object.keys with plain loop
-  replaceInSource(origSource, source, /return Object\.keys\(map\);/g, () => `return (function() { var r = []; for (var p in map) { if (map.hasOwnProperty(p)) { r.push(p); } } return r; }())`);
-
-  // fix internal getters (in source modules as well)
-  replaceInSource(origSource, source, /(__webpack_require__\([0-9]+\)\..*);/g, match => `${match[1]}();`);
-
-  // fix star imports + getters
-  replaceInSource(origSource, source, /=.*(__WEBPACK_IMPORTED_MODULE_[0-9_a-z]+)($|;)/gmi, match => `= (function(){ var result = {}; for (var prop in ${match[1]}) { if(${match[1]}.hasOwnProperty(prop) && typeof ${match[1]}[prop] === "function") result[prop] = ${match[1]}[prop](); }  return result; }());`);
-
-  // ModuleConcatenationPlugin fixes:
-  replaceInSource(origSource, source, /\/\* harmony default export \*\/ var (.+?) = __webpack_exports__\["(.*)"\] = (.*?);/g, match => `/* harmony default export */ var ${match[1]} = ${match[3]}; __webpack_require__.d(__webpack_exports__, "${match[2]}", function() { return ${match[3]}; });`);
-  replaceInSource(origSource, source, /(\w[a-z0-9_]+)\.([a-z]+)/g, (match) => { return match.input.indexOf(`${match[1]} = /*#__PURE__*/`) > -1 ? `${match[0]}()` : null });
-  replaceInSource(origSource, source, /([a-z0-9_]+)\[".*?"(\s?\/.*?\/)?\]/g, (match) => {
-    const isInlinedModule = new RegExp(`// EXTERNAL MODULE.*\r?\nvar ${match[1]} =`, 'g').test(match.input);
-    return isInlinedModule ? `(${match[0]}())` : null
-  });
-  replaceInSource(origSource, source, /(.*) = ([0-9_a-z]+)($|;)/g, (match) => {
-    const isStarImport = new RegExp(`// EXTERNAL MODULE.*\r?\nvar ${match[2]} =`, 'g').test(match.input);
-    return isStarImport ? `${match[1]} = (function(){ var result = {}; for (var prop in ${match[2]}) { if(${match[2]}.hasOwnProperty(prop) && typeof ${match[2]}[prop] === "function") result[prop] = ${match[2]}[prop](); }  return result; }());` : null;
-  });
-
-  // add support for custom replacers
-  if (options.customReplacers) {
-    options.customReplacers.forEach(replacer => {
-      replaceInSource(origSource, source, replacer.reg, replacer.value);
-    });
-  }
-
-  return source;
-}
-
-/**
- * Helper function which handles replacements in the module source
- */
-const replaceInSource = (origSource, source, regex, replacement) => {
-  if (regex.test(origSource)) {
-    let match;
-    regex.lastIndex = 0;
-    while (match = regex.exec(origSource)) {  // eslint-disable-line
-      const oldStatement = match[0],
-            newStatement = replacement(match);
-
-      if (newStatement !== null) {
-        source.replace(match.index, match.index + oldStatement.length - 1, newStatement);
-      }
-
-      if (match.index === regex.lastIndex) {
-        regex.lastIndex++;
+        if (match.index === regex.lastIndex) {
+          regex.lastIndex++;
+        }
       }
     }
   }
 }
 
 module.exports = ES3HarmonyPlugin;
-/* global module require */

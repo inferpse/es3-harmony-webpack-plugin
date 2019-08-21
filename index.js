@@ -72,6 +72,7 @@ class ES3HarmonyPlugin {
 
         // avoid using "bind" in ES3 environment
         replaceInSource(origSource, source, /__webpack_require__\.bind\(null, (.*?)\)/g, match => `function(){ return __webpack_require__(${match[1]}) }`);
+        replaceInSource(origSource, source, /__webpack_require__\.t\.bind\(null, (.*?)\)/g, match => `function(){ return __webpack_require__.t(${match[1]}) }`);
 
         // explicitly invoke getter function in the places where it's used
         replaceInSource(origSource, source, /([a-z0-9_]*?__WEBPACK_IMPORTED_MODULE.*?\[(?:\/\*.*?\*\/)*?\s?".*?"\])/gi, match => `(${match[0]}())`);

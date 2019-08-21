@@ -3,7 +3,8 @@ const { ReplaceSource } = require('webpack-sources');
 class ES3HarmonyPlugin {
   constructor(options) {
     this.options = Object.assign({
-      customReplacers: null
+      customReplacers: null,
+      customHeadReplacers: null
     }, options);
   }
   apply(compiler) {
@@ -18,7 +19,9 @@ class ES3HarmonyPlugin {
       });
 
       compilation.mainTemplate.hooks.requireExtensions.tap('ES3HarmonyPlugin', source => {
-        return source
+        const { customHeadReplacers } = this.options;
+
+        source = source
           .replace(
             /__webpack_require__\.r =.*{[\s\S]+?};/,
             '__webpack_require__.r = function(exports) { exports.__esModule = true }'
@@ -31,6 +34,33 @@ class ES3HarmonyPlugin {
             /(__webpack_require__\((.+)?\)(\.|\[).*);/g,
             '$1();'
           )
+
+          // webpack 4.39.2 fixes
+          .replace(
+            /\bdocument\.head\./gm,
+            "document.querySelector('head')."
+          )
+          .replace(
+            'var ns = Object.create(null);',
+            'var ns = {};'
+          )
+          .replace(
+            "Object.defineProperty(ns, 'default', { enumerable: true, value: value });",
+            "ns['default'] = value;"
+          )
+          .replace(
+            "__webpack_require__.d(ns, key, function(key) { return value[key]; }.bind(null, key)",
+            "(function (key) { __webpack_require__.d(ns, key, function() { return value[key]; }) }(key)",
+          );
+
+        // add support for custom head replacers
+        if (customHeadReplacers) {
+          customHeadReplacers.forEach(replacer => {
+            source = source.replace(replacer.reg, replacer.value);
+          });
+        }
+
+        return source;
       });
 
       compilation.moduleTemplates.javascript.hooks.module.tap('ES3HarmonyPlugin', source => {

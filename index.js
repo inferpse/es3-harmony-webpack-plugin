@@ -50,7 +50,7 @@ class ES3HarmonyPlugin {
           )
           .replace(
             "__webpack_require__.d(ns, key, function(key) { return value[key]; }.bind(null, key)",
-            "(function (key) { __webpack_require__.d(ns, key, function() { return value[key]; }) }(key)",
+            "(function (key) { __webpack_require__.d(ns, key, function() { return value[key]; }) }(key)"
           );
 
         // add support for custom head replacers

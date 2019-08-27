@@ -1,6 +1,6 @@
 {
   "name": "es3-harmony-webpack-plugin",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "description": "Modify Webpack 4 output to allow it to run in ES3 environment (including sourcemaps)",
   "main": "index.js",
   "scripts": {
